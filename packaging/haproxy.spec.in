@@ -1,0 +1,55 @@
+Name:           haproxy
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Reliable, high performance TCP/HTTP load balancer
+License:        GPL-2.0-or-later
+URL:            https://www.haproxy.org/
+BuildArch:      %{_arch}
+
+Source0:        haproxy
+Source1:        haproxy.cfg
+Source2:        haproxy.service
+Source3:        haproxy.sysconfig
+Source4:        conf.d.keep
+Source5:        LICENSE
+
+%description
+HAProxy is a reliable, high-performance solution offering high availability,
+load balancing, and proxying for TCP and HTTP applications.
+
+%prep
+
+%build
+
+%install
+rm -rf %{buildroot}
+install -Dpm 0755 %{SOURCE0} %{buildroot}%{_sbindir}/haproxy
+install -Dpm 0644 %{SOURCE1} %{buildroot}%{_sysconfdir}/haproxy/haproxy.cfg
+install -Dpm 0644 %{SOURCE2} %{buildroot}%{_unitdir}/haproxy.service
+install -Dpm 0644 %{SOURCE3} %{buildroot}%{_sysconfdir}/sysconfig/haproxy
+install -Dpm 0644 %{SOURCE4} %{buildroot}%{_sysconfdir}/haproxy/conf.d/.keep
+install -Dpm 0644 %{SOURCE5} %{buildroot}%{_datadir}/doc/haproxy/LICENSE
+
+%post
+if [ -d /run/systemd/system ]; then
+    /usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+fi
+
+%postun
+if [ -d /run/systemd/system ]; then
+    /usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+fi
+
+%files
+%license %{_datadir}/doc/haproxy/LICENSE
+%{_sbindir}/haproxy
+%config(noreplace) %{_sysconfdir}/haproxy/haproxy.cfg
+%config(noreplace) %{_sysconfdir}/sysconfig/haproxy
+%dir %{_sysconfdir}/haproxy
+%dir %{_sysconfdir}/haproxy/conf.d
+%config(noreplace) %{_sysconfdir}/haproxy/conf.d/.keep
+%{_unitdir}/haproxy.service
+
+%changelog
+* Thu Jan 01 1970 Local HAProxy package build <noreply@localhost> - @VERSION@-1
+- Build HAProxy from the official upstream source tarball.

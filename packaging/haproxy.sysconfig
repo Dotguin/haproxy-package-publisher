@@ -1,0 +1,2 @@
+# Extra HAProxy command-line options. Example: OPTIONS="-S /run/haproxy/admin.sock"
+OPTIONS=

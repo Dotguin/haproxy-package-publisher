@@ -1,0 +1,83 @@
+name: Build and release HAProxy packages
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: HAProxy version to build (X.Y.Z)
+        required: true
+        default: 3.2.23
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ubuntu-22.04-deb
+            command: ./build-deb.sh 22.04
+            artifact: output/deb/ubuntu22.04/haproxy_*.deb
+            checksum: output/deb/ubuntu22.04/SHA256SUMS
+          - target: ubuntu-24.04-deb
+            command: ./build-deb.sh 24.04
+            artifact: output/deb/ubuntu24.04/haproxy_*.deb
+            checksum: output/deb/ubuntu24.04/SHA256SUMS
+          - target: ubuntu-26.04-deb
+            command: ./build-deb.sh 26.04
+            artifact: output/deb/ubuntu26.04/haproxy_*.deb
+            checksum: output/deb/ubuntu26.04/SHA256SUMS
+          - target: rocky-8-rpm
+            command: ./build-rpm.sh 8
+            artifact: output/rpm/el8/**/*.rpm
+            checksum: output/rpm/el8/SHA256SUMS
+          - target: rocky-9-rpm
+            command: ./build-rpm.sh 9
+            artifact: output/rpm/el9/**/*.rpm
+            checksum: output/rpm/el9/SHA256SUMS
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Resolve official source checksum
+        shell: bash
+        run: |
+          VERSION='${{ inputs.version || github.ref_name }}'
+          VERSION="${VERSION#v}"
+          VERSION="${VERSION%%-*}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          SERIES="${VERSION%.*}"
+          SHA256="$(curl -fsSL "https://www.haproxy.org/download/${SERIES}/src/haproxy-${VERSION}.tar.gz.sha256" | awk 'NF { print $1; exit }')"
+          [[ "$SHA256" =~ ^[[:xdigit:]]{64}$ ]]
+          echo "HAPROXY_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "HAPROXY_SHA256=$SHA256" >> "$GITHUB_ENV"
+      - name: Build package
+        run: ${{ matrix.command }} --version "$HAPROXY_VERSION" --sha256 "$HAPROXY_SHA256"
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            ${{ matrix.artifact }}
+            ${{ matrix.checksum }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/**
+          generate_release_notes: true

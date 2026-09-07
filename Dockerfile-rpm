@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1.7
+# Native Rocky Linux 8 or 9 RPM builder.
+ARG ROCKY_VERSION=9
+FROM rockylinux:${ROCKY_VERSION} AS build
+
+# Change HAPROXY_VERSION + HAPROXY_SERIES + HAPROXY_SHA256 together for another release.
+ARG HAPROXY_VERSION=3.2.23
+ARG HAPROXY_SERIES=3.2
+ARG HAPROXY_SHA256=82d14ef33571e4edeb9197516c0d058a3775fb80541e46afe4377428e461fef0
+ARG BUILD_JOBS=4
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# lua-devel is in CRB (EL9) / PowerTools (EL8), not the default Rocky repos.
+RUN dnf -y install dnf-plugins-core \
+ && if [[ "$(rpm -E '%{rhel}')" == "9" ]]; then dnf config-manager --set-enabled crb; else dnf config-manager --set-enabled powertools; fi \
+ && dnf -y install \
+      ca-certificates curl-minimal gcc make rpm-build rpmdevtools \
+      openssl-devel pcre2-devel zlib-devel lua-devel systemd-devel libxcrypt-devel \
+ && dnf clean all
+
+WORKDIR /usr/src
+RUN curl --fail --location --retry 4 --retry-all-errors \
+      --output haproxy-${HAPROXY_VERSION}.tar.gz \
+      https://www.haproxy.org/download/${HAPROXY_SERIES}/src/haproxy-${HAPROXY_VERSION}.tar.gz \
+ && echo "${HAPROXY_SHA256}  haproxy-${HAPROXY_VERSION}.tar.gz" | sha256sum --check --strict \
+ && tar --extract --gzip --file haproxy-${HAPROXY_VERSION}.tar.gz \
+ && rm haproxy-${HAPROXY_VERSION}.tar.gz
+
+WORKDIR /usr/src/haproxy-${HAPROXY_VERSION}
+RUN make -j"${BUILD_JOBS}" TARGET=linux-glibc \
+      USE_OPENSSL=1 USE_PCRE2=1 USE_SLZ=1 USE_ZLIB=1 USE_LUA=1 \
+      USE_CRYPT_H=1 USE_LINUX_TPROXY=1 USE_GETADDRINFO=1 USE_SYSTEMD=1 USE_PROMEX=1 \
+ && strip --strip-unneeded haproxy
+
+COPY packaging/ /tmp/packaging/
+RUN set -eux; \
+    rpmdev-setuptree; \
+    cp haproxy /root/rpmbuild/SOURCES/haproxy; \
+    cp LICENSE /root/rpmbuild/SOURCES/LICENSE; \
+    cp /tmp/packaging/haproxy.cfg /root/rpmbuild/SOURCES/; \
+    cp /tmp/packaging/haproxy.service /root/rpmbuild/SOURCES/; \
+    cp /tmp/packaging/haproxy.sysconfig /root/rpmbuild/SOURCES/; \
+    cp /tmp/packaging/conf.d.keep /root/rpmbuild/SOURCES/; \
+    sed "s/@VERSION@/${HAPROXY_VERSION}/g" /tmp/packaging/haproxy.spec.in > /root/rpmbuild/SPECS/haproxy.spec; \
+    rpmbuild -bb /root/rpmbuild/SPECS/haproxy.spec; \
+    rpm -qpi /root/rpmbuild/RPMS/*/haproxy-*.rpm; \
+    rpm -qlp /root/rpmbuild/RPMS/*/haproxy-*.rpm >/dev/null
+
+FROM scratch AS artifact
+COPY --from=build /root/rpmbuild/RPMS/ /

@@ -1,0 +1,120 @@
+# syntax=docker/dockerfile:1.7
+# Build a native package for one of the supported Ubuntu releases.
+ARG UBUNTU_VERSION=24.04
+FROM ubuntu:${UBUNTU_VERSION} AS build
+
+# Change HAPROXY_VERSION + HAPROXY_SERIES + HAPROXY_SHA256 together for another release.
+ARG HAPROXY_VERSION=3.2.23
+ARG HAPROXY_SERIES=3.2
+ARG HAPROXY_SHA256=82d14ef33571e4edeb9197516c0d058a3775fb80541e46afe4377428e461fef0
+ARG PACKAGE_RELEASE=1~ubuntu24.04
+ARG DEBIAN_FRONTEND=noninteractive
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN set -eux; \
+    . /etc/os-release; \
+    case "${VERSION_ID}" in \
+      22.04) lua_dev=liblua5.3-dev ;; \
+      24.04|26.04) lua_dev=liblua5.4-dev ;; \
+      *) echo "Unsupported Ubuntu release: ${VERSION_ID}" >&2; exit 1 ;; \
+    esac; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      build-essential ca-certificates curl dpkg-dev file \
+      "${lua_dev}" libpcre2-dev libssl-dev libsystemd-dev zlib1g-dev; \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src
+RUN curl --fail --location --retry 4 --retry-all-errors \
+      --output haproxy-${HAPROXY_VERSION}.tar.gz \
+      https://www.haproxy.org/download/${HAPROXY_SERIES}/src/haproxy-${HAPROXY_VERSION}.tar.gz \
+ && echo "${HAPROXY_SHA256}  haproxy-${HAPROXY_VERSION}.tar.gz" | sha256sum --check --strict \
+ && tar --extract --gzip --file haproxy-${HAPROXY_VERSION}.tar.gz \
+ && rm haproxy-${HAPROXY_VERSION}.tar.gz
+
+WORKDIR /usr/src/haproxy-${HAPROXY_VERSION}
+# A conservative default prevents an oversized CPU count from exhausting CI runners.
+ARG BUILD_JOBS=4
+RUN make -j"${BUILD_JOBS}" \
+      TARGET=linux-glibc \
+      USE_OPENSSL=1 USE_PCRE2=1 USE_ZLIB=1 USE_LUA=1 \
+      USE_CRYPT_H=1 USE_LINUX_TPROXY=1 USE_GETADDRINFO=1 USE_PROMEX=1 \
+ && strip --strip-unneeded haproxy
+
+# Assemble a conventional binary Debian package without relying on host tools.
+COPY packaging/ /tmp/packaging/
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    pkgroot="/pkg/haproxy"; \
+    install -d \
+      "${pkgroot}/DEBIAN" \
+      "${pkgroot}/usr/sbin" \
+      "${pkgroot}/etc/haproxy/conf.d" \
+      "${pkgroot}/etc/sysconfig" \
+      "${pkgroot}/etc/logrotate.d" \
+      "${pkgroot}/lib/systemd/system" \
+      "${pkgroot}/usr/share/doc/haproxy"; \
+    install -m 0755 haproxy "${pkgroot}/usr/sbin/haproxy"; \
+    install -m 0644 /tmp/packaging/haproxy.cfg "${pkgroot}/etc/haproxy/haproxy.cfg"; \
+    install -m 0644 /tmp/packaging/conf.d.keep "${pkgroot}/etc/haproxy/conf.d/.keep"; \
+    install -m 0644 /tmp/packaging/haproxy.sysconfig "${pkgroot}/etc/sysconfig/haproxy"; \
+    install -m 0644 LICENSE "${pkgroot}/usr/share/doc/haproxy/copyright"; \
+    ubuntu_codename="$(. /etc/os-release && printf '%s' "${VERSION_CODENAME}")"; \
+    printf '%s\n' \
+      "haproxy (${HAPROXY_VERSION}-${PACKAGE_RELEASE}) ${ubuntu_codename}; urgency=medium" \
+      '' \
+      "  * Build HAProxy ${HAPROXY_VERSION} from the official upstream source tarball." \
+      '' \
+      ' -- Local build <noreply@localhost>  Thu, 01 Jan 1970 00:00:00 +0000' \
+      > "${pkgroot}/usr/share/doc/haproxy/changelog.Debian"; \
+    gzip -n -9 "${pkgroot}/usr/share/doc/haproxy/changelog.Debian"; \
+    printf '%s\n' \
+      '/var/log/haproxy.log {' \
+      '    weekly' \
+      '    rotate 12' \
+      '    missingok' \
+      '    notifempty' \
+      '    compress' \
+      '    delaycompress' \
+      '    create 0640 syslog adm' \
+      '}' > "${pkgroot}/etc/logrotate.d/haproxy"; \
+    install -m 0644 /tmp/packaging/haproxy.service "${pkgroot}/lib/systemd/system/haproxy.service"; \
+    printf '%s\n' '/etc/haproxy/haproxy.cfg' '/etc/sysconfig/haproxy' > "${pkgroot}/DEBIAN/conffiles"; \
+    printf '%s\n' \
+      '#!/bin/sh' \
+      'set -e' \
+      'if [ -d /run/systemd/system ]; then' \
+      '    systemctl daemon-reload >/dev/null 2>&1 || true' \
+      'fi' \
+      '#DEBHELPER#' \
+      > "${pkgroot}/DEBIAN/postinst"; \
+    chmod 0755 "${pkgroot}/DEBIAN/postinst"; \
+    # Dependency package names differ between Ubuntu releases (for example, Lua and OpenSSL).
+    if dpkg-query -W -f='${db:Status-Status}' liblua5.4-0 2>/dev/null | grep -qx installed; then lua_runtime=liblua5.4-0; else lua_runtime=liblua5.3-0; fi; \
+    if dpkg-query -W -f='${db:Status-Status}' libssl3t64 2>/dev/null | grep -qx installed; then ssl_runtime=libssl3t64; else ssl_runtime=libssl3; fi; \
+    dependencies=(); \
+    for package in libc6 "${lua_runtime}" libpcre2-8-0 "${ssl_runtime}" libsystemd0 zlib1g; do \
+      dependencies+=("$(dpkg-query -W -f='${binary:Package} (>= ${Version})' "${package}")"); \
+    done; \
+    printf -v depends '%s, ' "${dependencies[@]}"; depends="${depends%, }"; \
+    printf '%s\n' \
+      'Package: haproxy' \
+      "Version: ${HAPROXY_VERSION}-${PACKAGE_RELEASE}" \
+      "Architecture: ${arch}" \
+      'Maintainer: Local HAProxy package build <noreply@localhost>' \
+      "Depends: ${depends}" \
+      'Section: net' \
+      'Priority: optional' \
+      'Homepage: https://www.haproxy.org/' \
+      'Description: reliable, high performance TCP/HTTP load balancer' \
+      ' HAProxy is a free, very fast and reliable solution offering high' \
+      ' availability, load balancing, and proxying for TCP and HTTP applications.' \
+      > "${pkgroot}/DEBIAN/control"; \
+    dpkg-deb --root-owner-group --build "${pkgroot}" "/pkg/haproxy_${HAPROXY_VERSION}-${PACKAGE_RELEASE}_${arch}.deb"; \
+    dpkg-deb --info "/pkg/haproxy_${HAPROXY_VERSION}-${PACKAGE_RELEASE}_${arch}.deb"; \
+    dpkg-deb --contents "/pkg/haproxy_${HAPROXY_VERSION}-${PACKAGE_RELEASE}_${arch}.deb" >/dev/null
+
+FROM scratch AS artifact
+# Export only the installable artifact, not the package staging directory.
+COPY --from=build /pkg/*.deb /
