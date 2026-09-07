@@ -57,7 +57,12 @@ RUN set -eux; \
     cp /tmp/packaging/haproxy.service /root/rpmbuild/SOURCES/; \
     cp /tmp/packaging/haproxy.sysconfig /root/rpmbuild/SOURCES/; \
     cp /tmp/packaging/conf.d.keep /root/rpmbuild/SOURCES/; \
-    sed "s/@VERSION@/${HAPROXY_VERSION}/g" /tmp/packaging/haproxy.spec.in > /root/rpmbuild/SPECS/haproxy.spec; \
+    BUILD_DATE="$(LC_ALL=C date -u '+%a %b %d %Y')"; \
+    sed \
+      -e "s/@VERSION@/${HAPROXY_VERSION}/g" \
+      -e "s/@BUILD_DATE@/${BUILD_DATE}/g" \
+      /tmp/packaging/haproxy.spec.in \
+      > /root/rpmbuild/SPECS/haproxy.spec; \
     rpmbuild -bb /root/rpmbuild/SPECS/haproxy.spec; \
     rpm -qpi /root/rpmbuild/RPMS/*/haproxy-*.rpm; \
     rpm -qlp /root/rpmbuild/RPMS/*/haproxy-*.rpm >/dev/null
