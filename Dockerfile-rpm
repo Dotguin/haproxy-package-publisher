@@ -11,12 +11,28 @@ ARG BUILD_JOBS=4
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # lua-devel is in CRB (EL9) / PowerTools (EL8), not the default Rocky repos.
+# EL9 base images may include curl-minimal, which conflicts with curl.
 RUN dnf -y install dnf-plugins-core \
- && if [[ "$(rpm -E '%{rhel}')" == "9" ]]; then dnf config-manager --set-enabled crb; else dnf config-manager --set-enabled powertools; fi \
+ && RHEL_VERSION="$(rpm -E '%{rhel}')" \
+ && case "${RHEL_VERSION}" in \
+      9) \
+        dnf config-manager --set-enabled crb; \
+        CURL_PACKAGE="curl-minimal"; \
+        ;; \
+      8) \
+        dnf config-manager --set-enabled powertools; \
+        CURL_PACKAGE="curl"; \
+        ;; \
+      *) \
+        echo "Unsupported EL version: ${RHEL_VERSION}" >&2; \
+        exit 1; \
+        ;; \
+    esac \
  && dnf -y install \
-      ca-certificates curl-minimal gcc make rpm-build rpmdevtools \
+      ca-certificates "${CURL_PACKAGE}" gcc make rpm-build rpmdevtools \
       openssl-devel pcre2-devel zlib-devel lua-devel systemd-devel libxcrypt-devel \
- && dnf clean all
+ && dnf clean all \
+ && rm -rf /var/cache/dnf
 
 WORKDIR /usr/src
 RUN curl --fail --location --retry 4 --retry-all-errors \
