@@ -35,7 +35,7 @@ for ubuntu_release in "${ubuntu_releases[@]}"; do
   rm -rf "$destination"
   mkdir -p "$destination"
 
-  args=(buildx build --target artifact --output "type=local,dest=${destination}" -f "${root_dir}/Dockerfile.rpm"
+  args=(buildx build --target artifact --output "type=local,dest=${destination}" -f "${root_dir}/Dockerfile-deb"
     --build-arg "UBUNTU_VERSION=${ubuntu_release}"
     --build-arg "PACKAGE_RELEASE=1~ubuntu${ubuntu_release}"
     --build-arg "HAPROXY_VERSION=${version}"

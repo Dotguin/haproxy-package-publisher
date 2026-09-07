@@ -28,7 +28,7 @@ RUN curl --fail --location --retry 4 --retry-all-errors \
 
 WORKDIR /usr/src/haproxy-${HAPROXY_VERSION}
 RUN make -j"${BUILD_JOBS}" TARGET=linux-glibc \
-      USE_OPENSSL=1 USE_PCRE2=1 USE_SLZ=1 USE_ZLIB=1 USE_LUA=1 \
+      USE_OPENSSL=1 USE_PCRE2=1 USE_ZLIB=1 USE_LUA=1 \
       USE_CRYPT_H=1 USE_LINUX_TPROXY=1 USE_GETADDRINFO=1 USE_SYSTEMD=1 USE_PROMEX=1 \
  && strip --strip-unneeded haproxy
 
