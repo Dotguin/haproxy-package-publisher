@@ -51,5 +51,5 @@ fi
 %{_unitdir}/haproxy.service
 
 %changelog
-* Thu Jan 01 1970 Local HAProxy package build <noreply@localhost> - @VERSION@-1
+* @BUILD_DATE@ Local HAProxy package build <noreply@localhost> - @VERSION@-1
 - Build HAProxy from the official upstream source tarball.
