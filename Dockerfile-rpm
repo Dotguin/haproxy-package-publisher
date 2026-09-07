@@ -35,7 +35,7 @@ RUN dnf -y install dnf-plugins-core \
  && rm -rf /var/cache/dnf
 
 WORKDIR /usr/src
-RUN curl --fail --location --retry 4 --retry-all-errors \
+RUN curl --fail --location --retry 4 \
       --output haproxy-${HAPROXY_VERSION}.tar.gz \
       https://www.haproxy.org/download/${HAPROXY_SERIES}/src/haproxy-${HAPROXY_VERSION}.tar.gz \
  && echo "${HAPROXY_SHA256}  haproxy-${HAPROXY_VERSION}.tar.gz" | sha256sum --check --strict \
