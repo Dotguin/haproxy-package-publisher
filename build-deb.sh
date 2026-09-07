@@ -4,10 +4,12 @@
 set -Eeuo pipefail
 
 readonly DEFAULT_VERSION='3.2.23'
+readonly DEFAULT_RELEASE='1'
 readonly DEFAULT_SHA256='82d14ef33571e4edeb9197516c0d058a3775fb80541e46afe4377428e461fef0'
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 out_root="${root_dir}/output/deb"
 version="${HAPROXY_VERSION:-$DEFAULT_VERSION}"
+release="${PACKAGE_RELEASE:-$DEFAULT_RELEASE}"
 sha256="${HAPROXY_SHA256:-$DEFAULT_SHA256}"
 no_cache=false
 ubuntu_releases=()
@@ -15,6 +17,7 @@ ubuntu_releases=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) version="${2:?--version requires X.Y.Z}"; shift 2 ;;
+    --release) release="${2:?--release requires a positive integer}"; shift 2 ;;
     --sha256) sha256="${2:?--sha256 requires a value}"; shift 2 ;;
     --no-cache) no_cache=true; shift ;;
     22.04|24.04|26.04) ubuntu_releases+=("$1"); shift ;;
@@ -23,6 +26,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Version must be X.Y.Z.' >&2; exit 2; }
+[[ "$release" =~ ^[1-9][0-9]*$ ]] || {
+  echo 'Release must be a positive integer.' >&2
+  exit 2
+}
 [[ "$sha256" =~ ^[[:xdigit:]]{64}$ ]] || { echo 'SHA-256 must be 64 hexadecimal characters.' >&2; exit 2; }
 [[ ${#ubuntu_releases[@]} -gt 0 ]] || ubuntu_releases=(22.04 24.04 26.04)
 series="${version%.*}"
@@ -37,7 +44,7 @@ for ubuntu_release in "${ubuntu_releases[@]}"; do
 
   args=(buildx build --target artifact --output "type=local,dest=${destination}" -f "${root_dir}/Dockerfile-deb"
     --build-arg "UBUNTU_VERSION=${ubuntu_release}"
-    --build-arg "PACKAGE_RELEASE=1~ubuntu${ubuntu_release}"
+    --build-arg "PACKAGE_RELEASE=${release}~ubuntu${ubuntu_release}"
     --build-arg "HAPROXY_VERSION=${version}"
     --build-arg "HAPROXY_SERIES=${series}"
     --build-arg "HAPROXY_SHA256=${sha256}")

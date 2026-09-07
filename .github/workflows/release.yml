@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: HAProxy version to build (X.Y.Z)
+        description: HAProxy version to build (X.Y.Z-N)
         required: true
-        default: 3.2.23
+        default: 3.2.23-1
 
 permissions:
   contents: write
@@ -44,20 +44,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Resolve official source checksum
+      - name: Resolve source version, package release, and checksum
         shell: bash
+        env:
+          RAW_VERSION: ${{ inputs.version || github.ref_name }}
         run: |
-          VERSION='${{ inputs.version || github.ref_name }}'
-          VERSION="${VERSION#v}"
-          VERSION="${VERSION%%-*}"
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          set -euo pipefail
+
+          RAW_VERSION="${RAW_VERSION#v}"
+
+          if [[ "$RAW_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-([1-9][0-9]*)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            RELEASE="${BASH_REMATCH[2]}"
+          else
+            echo "Expected tag/version format: vX.Y.Z-N (example: v3.2.23-6)" >&2
+            exit 1
+          fi
+
           SERIES="${VERSION%.*}"
-          SHA256="$(curl -fsSL "https://www.haproxy.org/download/${SERIES}/src/haproxy-${VERSION}.tar.gz.sha256" | awk 'NF { print $1; exit }')"
+          SHA256="$(
+            curl -fsSL \
+              "https://www.haproxy.org/download/${SERIES}/src/haproxy-${VERSION}.tar.gz.sha256" |
+              awk 'NF { print $1; exit }'
+          )"
+
           [[ "$SHA256" =~ ^[[:xdigit:]]{64}$ ]]
-          echo "HAPROXY_VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "HAPROXY_SHA256=$SHA256" >> "$GITHUB_ENV"
+
+          {
+            echo "HAPROXY_VERSION=$VERSION"
+            echo "PACKAGE_RELEASE=$RELEASE"
+            echo "HAPROXY_SHA256=$SHA256"
+          } >> "$GITHUB_ENV"
       - name: Build package
-        run: ${{ matrix.command }} --version "$HAPROXY_VERSION" --sha256 "$HAPROXY_SHA256"
+        run: >-
+          ${{ matrix.command }}
+          --version "$HAPROXY_VERSION"
+          --release "$PACKAGE_RELEASE"
+          --sha256 "$HAPROXY_SHA256"
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
