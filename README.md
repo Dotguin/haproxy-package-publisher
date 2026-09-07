@@ -64,6 +64,7 @@ chmod +x build-deb.sh build-rpm.sh
 
 ```bash
 VERSION=3.4.2
+RELEASE=1
 SERIES=${VERSION%.*}
 SHA256="$(
   curl -fsSL \
@@ -74,29 +75,30 @@ SHA256="$(
 # SHA-256 형식 확인
 [[ "$SHA256" =~ ^[[:xdigit:]]{64}$ ]]
 
-./build-deb.sh --version "$VERSION" --sha256 "$SHA256"
-./build-rpm.sh --version "$VERSION" --sha256 "$SHA256"
+./build-deb.sh --version "$VERSION" --release "$RELEASE" --sha256 "$SHA256"
+./build-rpm.sh --version "$VERSION" --release "$RELEASE" --sha256 "$SHA256"
 ```
 
 특정 대상만 지정할 수도 있습니다.
 
 ```bash
-./build-deb.sh --version "$VERSION" --sha256 "$SHA256" 24.04
-./build-rpm.sh --version "$VERSION" --sha256 "$SHA256" 9
+./build-deb.sh --version "$VERSION" --release "$RELEASE" --sha256 "$SHA256" 24.04
+./build-rpm.sh --version "$VERSION" --release "$RELEASE" --sha256 "$SHA256" 9
 ```
 
 기본값은 다음과 같습니다.
 
 ```text
 HAPROXY_VERSION=3.2.23
+PACKAGE_RELEASE=1
 HAPROXY_SHA256=82d14ef33571e4edeb9197516c0d058a3775fb80541e46afe4377428e461fef0
 ```
 
 환경 변수로도 지정할 수 있습니다.
 
 ```bash
-HAPROXY_VERSION="$VERSION" HAPROXY_SHA256="$SHA256" ./build-deb.sh 24.04
-HAPROXY_VERSION="$VERSION" HAPROXY_SHA256="$SHA256" ./build-rpm.sh 9
+HAPROXY_VERSION="$VERSION" PACKAGE_RELEASE="$RELEASE" HAPROXY_SHA256="$SHA256" ./build-deb.sh 24.04
+HAPROXY_VERSION="$VERSION" PACKAGE_RELEASE="$RELEASE" HAPROXY_SHA256="$SHA256" ./build-rpm.sh 9
 ```
 
 ## 산출물과 checksum
@@ -157,7 +159,15 @@ v3.2.24-1  # upstream 버전 변경 후 release를 1부터 재시작
 
 `<package release>`는 HAProxy 소스 자체의 버전이 아닙니다. systemd unit, 기본 설정, 의존성, 빌드 옵션 등 패키징 결과만 변경된 경우 release를 증가시킵니다.
 
-> **구현 주의:** 현재 저장소의 기본 브랜치에서 RPM spec의 `Release`와 `build-deb.sh`의 `PACKAGE_RELEASE` 기본값은 `1`로 고정되어 있습니다. `v3.2.23-6` 태그의 `6`을 실제 RPM/DEB 메타데이터에 반영하려면 workflow, `build-rpm.sh`, `build-deb.sh`, `Dockerfile-rpm`, `packaging/haproxy.spec.in`에 `--release`/`@RELEASE@` 전달을 구현해야 합니다. 구현 전에는 태그 접미사와 무관하게 `-1` 패키지가 만들어집니다.
+`v3.2.23-6` 태그는 workflow에서 upstream version `3.2.23`과 package release `6`으로 분리됩니다. 이 release 값은 `build-deb.sh`/`build-rpm.sh`의 `--release` 옵션을 거쳐 RPM spec의 `Release`와 DEB의 Debian revision에 반영됩니다.
+
+```text
+haproxy-3.2.23-6.el8.<arch>.rpm
+haproxy-3.2.23-6.el9.<arch>.rpm
+haproxy_3.2.23-6~ubuntu22.04_<arch>.deb
+haproxy_3.2.23-6~ubuntu24.04_<arch>.deb
+haproxy_3.2.23-6~ubuntu26.04_<arch>.deb
+```
 
 ## HAProxy 빌드 옵션
 
@@ -242,7 +252,7 @@ git push origin v3.2.23-1
 
 workflow는 다음 작업을 수행합니다.
 
-1. tag 이름에서 HAProxy upstream 버전을 해석합니다.
+1. tag 이름을 `upstream version`과 `package release`로 해석합니다. 예를 들어 `v3.2.23-6`은 HAProxy `3.2.23`, package release `6`입니다.
 2. HAProxy 공식 checksum 파일을 다운로드해 source SHA-256을 확인합니다.
 3. Ubuntu 22.04/24.04/26.04 DEB와 Rocky Linux 8/9 RPM을 matrix로 병렬 빌드합니다.
 4. 패키지와 각 대상의 `SHA256SUMS`를 artifact로 업로드합니다.
