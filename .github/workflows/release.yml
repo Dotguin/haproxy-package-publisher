@@ -101,8 +101,32 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: release-assets
-          merge-multiple: true
+          path: artifacts
+      - name: Assemble release assets and single checksum file
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+
+          while IFS= read -r -d '' file; do
+            name="$(basename "$file")"
+            # GitHub rewrites some characters in uploaded asset names ('~' -> '.'),
+            # so mirror that here and checksum the published names.
+            name="${name//\~/.}"
+            if [[ -e "release-assets/$name" ]]; then
+              echo "Duplicate asset name: $name" >&2
+              exit 1
+            fi
+            cp "$file" "release-assets/$name"
+          done < <(find artifacts -type f \( -name '*.rpm' -o -name '*.deb' \) -print0)
+
+          cd release-assets
+          find . -maxdepth 1 -type f \( -name '*.rpm' -o -name '*.deb' \) -printf '%f\0' \
+            | sort -z \
+            | xargs -0 --no-run-if-empty sha256sum -- > SHA256SUMS
+          [[ -s SHA256SUMS ]] || { echo 'No packages found in release-assets.' >&2; exit 1; }
+          cat SHA256SUMS
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:

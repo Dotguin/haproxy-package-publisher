@@ -268,6 +268,14 @@ workflow는 다음 작업을 수행합니다.
 4. 패키지와 각 대상의 `SHA256SUMS`를 artifact로 업로드합니다.
 5. 모든 빌드가 성공하면 tag 기반 GitHub Release에 산출물을 첨부합니다.
 
+Release job은 6개 타깃의 패키지를 한 디렉터리로 모은 뒤, 실제 첨부될 파일명 기준으로 통합 `SHA256SUMS` 1개를 생성해 함께 게시합니다. 따라서 Release에서 받은 패키지는 다음 한 줄로 검증합니다.
+
+```bash
+sha256sum --check SHA256SUMS
+```
+
+GitHub은 Release 자산 이름에서 일부 문자를 바꿔 게시합니다. 대표적으로 DEB 파일명의 `~`가 `.`로 바뀝니다(`haproxy_3.4.8-1~ubuntu22.04_amd64.deb` → `haproxy_3.4.8-1.ubuntu22.04_amd64.deb`). `SHA256SUMS`는 게시된 이름을 기준으로 계산되므로, 로컬 `output/deb/...`의 checksum 파일과는 파일명이 다를 수 있습니다.
+
 GitHub Release 작성에는 다음 권한이 필요하며 workflow에 이미 선언되어 있습니다.
 
 ```yaml
