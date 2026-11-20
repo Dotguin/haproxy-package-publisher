@@ -1,0 +1,3 @@
+# Build artifacts produced by build-deb.sh / build-rpm.sh
+output/deb/
+output/rpm/
