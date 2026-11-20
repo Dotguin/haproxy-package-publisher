@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Native Rocky Linux 8 or 9 RPM builder.
+# Native Rocky Linux 8, 9, or 10 RPM builder.
 ARG ROCKY_VERSION=9
 FROM rockylinux:${ROCKY_VERSION} AS build
 
@@ -11,18 +11,26 @@ ARG HAPROXY_SHA256=82d14ef33571e4edeb9197516c0d058a3775fb80541e46afe4377428e461f
 ARG BUILD_JOBS=4
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-# lua-devel is in CRB (EL9) / PowerTools (EL8), not the default Rocky repos.
+# lua-devel is in CRB (EL9/EL10) / PowerTools (EL8), not the default Rocky repos.
 # EL9 base images may include curl-minimal, which conflicts with curl.
+# EL10 ships zlib-ng-compat instead of zlib, so the devel package name differs.
 RUN dnf -y install dnf-plugins-core \
  && RHEL_VERSION="$(rpm -E '%{rhel}')" \
  && case "${RHEL_VERSION}" in \
+      10) \
+        dnf config-manager --set-enabled crb; \
+        CURL_PACKAGE="curl"; \
+        ZLIB_PACKAGE="zlib-ng-compat-devel"; \
+        ;; \
       9) \
         dnf config-manager --set-enabled crb; \
         CURL_PACKAGE="curl-minimal"; \
+        ZLIB_PACKAGE="zlib-devel"; \
         ;; \
       8) \
         dnf config-manager --set-enabled powertools; \
         CURL_PACKAGE="curl"; \
+        ZLIB_PACKAGE="zlib-devel"; \
         ;; \
       *) \
         echo "Unsupported EL version: ${RHEL_VERSION}" >&2; \
@@ -31,7 +39,7 @@ RUN dnf -y install dnf-plugins-core \
     esac \
  && dnf -y install \
       ca-certificates "${CURL_PACKAGE}" gcc make rpm-build rpmdevtools \
-      openssl-devel pcre2-devel zlib-devel lua-devel systemd-devel libxcrypt-devel \
+      openssl-devel pcre2-devel "${ZLIB_PACKAGE}" lua-devel systemd-devel libxcrypt-devel \
  && dnf clean all \
  && rm -rf /var/cache/dnf
 

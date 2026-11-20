@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build Rocky Linux RPMs.
-# Usage: ./build-rpm.sh [--version X.Y.Z --release N --sha256 SHA256] [8] [9]
+# Usage: ./build-rpm.sh [--version X.Y.Z --release N --sha256 SHA256] [8] [9] [10]
 set -Eeuo pipefail
 
 readonly DEFAULT_VERSION='3.2.23'
@@ -17,7 +17,7 @@ while [[ $# -gt 0 ]]; do
     --version) version="${2:?--version requires X.Y.Z}"; shift 2 ;;
     --release) release="${2:?--release requires a positive integer}"; shift 2 ;;
     --sha256) sha256="${2:?--sha256 requires a value}"; shift 2 ;;
-    8|9) versions+=("$1"); shift ;;
+    8|9|10) versions+=("$1"); shift ;;
     -h|--help) sed -n '2p' "$0"; exit 0 ;;
     *) echo "Unknown option or Rocky version: $1" >&2; exit 2 ;;
   esac
@@ -28,7 +28,7 @@ done
   exit 2
 }
 [[ "$sha256" =~ ^[[:xdigit:]]{64}$ ]] || { echo 'SHA-256 must be 64 hexadecimal characters.' >&2; exit 2; }
-[[ ${#versions[@]} -gt 0 ]] || versions=(8 9)
+[[ ${#versions[@]} -gt 0 ]] || versions=(8 9 10)
 series="${version%.*}"
 
 command -v docker >/dev/null 2>&1 || { echo 'ERROR: Docker CLI is required.' >&2; exit 1; }

@@ -41,6 +41,10 @@ jobs:
             command: ./build-rpm.sh 9
             artifact: output/rpm/el9/**/*.rpm
             checksum: output/rpm/el9/SHA256SUMS
+          - target: rocky-10-rpm
+            command: ./build-rpm.sh 10
+            artifact: output/rpm/el10/**/*.rpm
+            checksum: output/rpm/el10/SHA256SUMS
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

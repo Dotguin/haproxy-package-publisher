@@ -13,6 +13,9 @@
 | Ubuntu 26.04 | `ubuntu:26.04` | `.deb` |
 | Rocky Linux 8 | `rockylinux:8` | `.rpm` |
 | Rocky Linux 9 | `rockylinux:9` | `.rpm` |
+| Rocky Linux 10 | `rockylinux:10` | `.rpm` |
+
+EL10 기반 배포판은 zlib 대신 `zlib-ng-compat`을 제공하므로 빌드 이미지에서 해당 devel 패키지를 사용합니다. 소스는 동일하게 `USE_ZLIB=1`로 컴파일됩니다.
 
 기본적으로 실행 환경과 같은 CPU 아키텍처의 패키지가 생성됩니다. GitHub-hosted `ubuntu-latest` runner에서는 일반적으로 `amd64` 패키지가 생성됩니다. `arm64` 산출물이 필요하면 ARM runner 또는 적절히 구성한 Buildx/QEMU 환경을 사용해야 합니다.
 
@@ -44,7 +47,7 @@ chmod +x build-deb.sh build-rpm.sh
 # Ubuntu 22.04, 24.04, 26.04용 DEB 패키지 빌드
 ./build-deb.sh
 
-# Rocky Linux 8, 9용 RPM 패키지 빌드
+# Rocky Linux 8, 9, 10용 RPM 패키지 빌드
 ./build-rpm.sh
 ```
 
@@ -56,6 +59,9 @@ chmod +x build-deb.sh build-rpm.sh
 
 # Rocky Linux 9만
 ./build-rpm.sh 9
+
+# Rocky Linux 10만
+./build-rpm.sh 10
 ```
 
 ## 다른 HAProxy 버전 빌드
@@ -121,8 +127,11 @@ output/
     ├── el8/
     │   ├── <arch>/haproxy-<version>-<release>.el8.<arch>.rpm
     │   └── SHA256SUMS
-    └── el9/
-        ├── <arch>/haproxy-<version>-<release>.el9.<arch>.rpm
+    ├── el9/
+    │   ├── <arch>/haproxy-<version>-<release>.el9.<arch>.rpm
+    │   └── SHA256SUMS
+    └── el10/
+        ├── <arch>/haproxy-<version>-<release>.el10.<arch>.rpm
         └── SHA256SUMS
 ```
 
@@ -164,6 +173,7 @@ v3.2.24-1  # upstream 버전 변경 후 release를 1부터 재시작
 ```text
 haproxy-3.2.23-6.el8.<arch>.rpm
 haproxy-3.2.23-6.el9.<arch>.rpm
+haproxy-3.2.23-6.el10.<arch>.rpm
 haproxy_3.2.23-6~ubuntu22.04_<arch>.deb
 haproxy_3.2.23-6~ubuntu24.04_<arch>.deb
 haproxy_3.2.23-6~ubuntu26.04_<arch>.deb
@@ -254,7 +264,7 @@ workflow는 다음 작업을 수행합니다.
 
 1. tag 이름을 `upstream version`과 `package release`로 해석합니다. 예를 들어 `v3.2.23-6`은 HAProxy `3.2.23`, package release `6`입니다.
 2. HAProxy 공식 checksum 파일을 다운로드해 source SHA-256을 확인합니다.
-3. Ubuntu 22.04/24.04/26.04 DEB와 Rocky Linux 8/9 RPM을 matrix로 병렬 빌드합니다.
+3. Ubuntu 22.04/24.04/26.04 DEB와 Rocky Linux 8/9/10 RPM을 matrix로 병렬 빌드합니다.
 4. 패키지와 각 대상의 `SHA256SUMS`를 artifact로 업로드합니다.
 5. 모든 빌드가 성공하면 tag 기반 GitHub Release에 산출물을 첨부합니다.
 
